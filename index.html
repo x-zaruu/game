@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pembuat Soal Matematika: Geometri Lingkaran</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+        }
+        .controls {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        select {
+            padding: 8px;
+            font-size: 16px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            width: 250px;
+        }
+        button {
+            display: block;
+            margin: 10px auto;
+            padding: 10px 20px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        .question {
+            margin-top: 20px;
+            font-size: 18px;
+            line-height: 1.6;
+        }
+        .answer {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #ecf0f1;
+            border-radius: 5px;
+            display: none;
+        }
+        .show-answer {
+            background-color: #27ae60;
+            margin: 10px auto;
+            display: block;
+        }
+        .show-answer:hover {
+            background-color: #229954;
+        }
+        #diagram {
+            text-align: center;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Pembuat Soal Matematika: Geometri Lingkaran</h1>
+        <p style="text-align: center;">Pilih jenis soal dan klik tombol untuk menghasilkan soal geometri lingkaran.</p>
+        
+        <div class="controls">
+            <label for="typeSelect">Pilih Jenis Soal:</label>
+            <select id="typeSelect">
+                <option value="quad">Segi Empat Tali Busur</option>
+                <option value="triangle">Segi Tiga Tali Busur</option>
+                <option value="inscribed">Sudut Pusat dan Keliling</option>
+                <option value="quad_variables">Segi Empat Tali Busur dengan Variabel</option>
+                <option value="inscribed_adj">Sudut Keliling Berpelurus</option>
+                <option value="isosceles_chord">Segitiga Isosceles pada Lingkaran</option>
+                <option value="cyclic_quad_tangent">Segi Empat Tali Busur dengan Tangent</option>
+                <option value="cyclic_pentagon">Segi Lima Siklik</option>
+            </select>
+            <button onclick="generateQuestion()">Buat Soal Baru</button>
+            <button class="show-answer" onclick="toggleAnswer()" id="showBtn">Tampilkan Jawaban</button>
+        </div>
+        
+        <div id="question" class="question"></div>
+        <div id="diagram"></div>
+        <div id="answer" class="answer"></div>
+    </div>
+
+    <script>
+        let currentAngles = {};
+        let currentPos = {};
+        let questionType = '';
+
+        function generateThetas(n, minGap) {
+            while(true) {
+                let thetas = [];
+                for(let i = 0; i < n; i++) {
+                    thetas.push(Math.random() * 360);
+                }
+                thetas.sort((a, b) => a - b);
+                let ok = true;
+                for(let i = 0; i < n - 1; i++) {
+                    if(thetas[i + 1] - thetas[i] < minGap) {
+                        ok = false;
+                        break;
+                    }
+                }
+                if(ok && (thetas[0] + 360 - thetas[n - 1] >= minGap)) {
+                    return thetas;
+                }
+            }
+        }
+
+        function generateThetasForInscribed(centralAngle, minGap) {
+            while(true) {
+                let rotation = Math.random() * 360;
+                let rPos = rotation % 360;
+                let tPos = (rotation + centralAngle) % 360;
+                let oppStart = tPos;
+                let oppEnd = rPos + 360;
+                let oppLength = 360 - centralAngle;
+                if (oppLength < 3 * minGap) continue;
+                let sDist = minGap + Math.random() * (oppLength - 3 * minGap);
+                let sPos = (oppStart + sDist) % 360;
+                let remaining = oppLength - sDist;
+                let uDist = minGap + Math.random() * (remaining - 2 * minGap);
+                let uPos = (sPos + uDist) % 360;
+                let thetas = [rPos, sPos, tPos, uPos].map(p => p % 360);
+                thetas.sort((a, b) => a - b);
+                let gapsOk = true;
+                for (let i = 0; i < 3; i++) {
+                    if (thetas[i + 1] - thetas[i] < minGap) {
+                        gapsOk = false;
+                        break;
+                    }
+                }
+                if (thetas[0] + 360 - thetas[3] < minGap) gapsOk = false;
+                if (gapsOk) {
+                    return { R: rPos, S: sPos, T: tPos, U: uPos };
+                }
+            }
+        }
+
+        function point(deg) {
+            const rad = (deg % 360) * Math.PI / 180;
+            const x = 150 + 100 * Math.cos(rad);
+            const y = 150 + 100 * Math.sin(rad);
+            return {x, y};
+        }
+
+        function computeAngle(p, q1, q2) {
+            let v1x = q1.x - p.x;
+            let v1y = q1.y - p.y;
+            let v2x = q2.x - p.x;
+            let v2y = q2.y - p.y;
+            let len1 = Math.sqrt(v1x * v1x + v1y * v1y);
+            let len2 = Math.sqrt(v2x * v2x + v2y * v2y);
+            if (len1 == 0 || len2 == 0) return 0;
+            v1x /= len1; v1y /= len1;
+            v2x /= len2; v2y /= len2;
+            let dot = v1x * v2x + v1y * v2y;
+            let cross = v1x * v2y - v1y * v2x;
+            let signedAngRad = Math.atan2(cross, dot);
+            let signedAng = signedAngRad * 180 / Math.PI;
+            if (signedAng < 0) signedAng += 360;
+            let ang = signedAng <= 180 ? signedAng : 360 - signedAng;
+            return ang;
+        }
+
+        function dot(svg, p, label, offset = 15) {
+            // Dot
+            const d = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            d.setAttribute("cx", p.x.toFixed(1));
+            d.setAttribute("cy", p.y.toFixed(1));
+            d.setAttribute("r", "4");
+            d.setAttribute("fill", "black");
+            svg.appendChild(d);
+
+            // Label position radially outward
+            const dx = p.x - 150;
+            const dy = p.y - 150;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            const lx = p.x + (dx / dist) * offset;
+            const ly = p.y + (dy / dist) * offset + 3;
+            const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
+            t.setAttribute("x", lx.toFixed(1));
+            t.setAttribute("y", ly.toFixed(1));
+            t.setAttribute("font-size", "14");
+            t.setAttribute("font-weight", "bold");
+            t.setAttribute("fill", "black");
+            t.textContent = label;
+            svg.appendChild(t);
+        }
+
+        function drawAngleArc(svg, vertex, p1, p2, radius, label) {
+            let v1x = p1.x - vertex.x;
+            let v1y = p1.y - vertex.y;
+            let len1 = Math.sqrt(v1x * v1x + v1y * v1y);
+            if (len1 === 0) return;
+            v1x /= len1;
+            v1y /= len1;
+
+            let v2x = p2.x - vertex.x;
+            let v2y = p2.y - vertex.y;
+            let len2 = Math.sqrt(v2x * v2x + v2y * v2y);
+            if (len2 === 0) return;
+            v2x /= len2;
+            v2y /= len2;
+
+            let dot = v1x * v2x + v1y * v2y;
+            let cross = v1x * v2y - v1y * v2x;
+            let signedAngRad = Math.atan2(cross, dot);
+            let signedAng = signedAngRad * 180 / Math.PI;
+            if (signedAng < 0) signedAng += 360;
+
+            let sweepAng = signedAng <= 180 ? signedAng : 360 - signedAng;
+            let largeArc = sweepAng > 180 ? 1 : 0;
+            let sweepFlag = signedAng <= 180 ? 1 : 0;
+            let startRad = Math.atan2(v1y, v1x);
+            let endRad = startRad + (signedAng * Math.PI / 180);
+            if (signedAng > 180) {
+                startRad = Math.atan2(v2y, v2x);
+                endRad = startRad + ((360 - signedAng) * Math.PI / 180);
+                sweepFlag = 0;
+            }
+
+            let path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            let startX = vertex.x + radius * Math.cos(startRad);
+            let startY = vertex.y + radius * Math.sin(startRad);
+            let endX = vertex.x + radius * Math.cos(endRad);
+            let endY = vertex.y + radius * Math.sin(endRad);
+            let d = `M ${startX.toFixed(1)} ${startY.toFixed(1)} `;
+            d += `A ${radius} ${radius} 0 ${largeArc} ${sweepFlag} ${endX.toFixed(1)} ${endY.toFixed(1)}`;
+            path.setAttribute("d", d);
+            path.setAttribute("fill", "none");
+            path.setAttribute("stroke", "black");
+            path.setAttribute("stroke-width", "2");
+            svg.appendChild(path);
+
+            if (label) {
+                let midAngRad = startRad + (sweepAng / 2 * Math.PI / 180) * (sweepFlag === 1 ? 1 : -1);
+                let lx = vertex.x + (radius + 8) * Math.cos(midAngRad);
+                let ly = vertex.y + (radius + 8) * Math.sin(midAngRad);
+                let text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+                text.setAttribute("x", lx.toFixed(1));
+                text.setAttribute("y", ly.toFixed(1));
+                text.setAttribute("font-size", "12");
+                text.setAttribute("text-anchor", "middle");
+                text.setAttribute("dominant-baseline", "central");
+                text.setAttribute("fill", "black");
+                text.textContent = label;
+                svg.appendChild(text);
+            }
+        }
+
+        function drawDiagram() {
+            const diagramDiv = document.getElementById('diagram');
+            diagramDiv.innerHTML = '';
+
+            const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+            svg.setAttribute("width", "300");
+            svg.setAttribute("height", "300");
+            svg.setAttribute("viewBox", "0 0 300 300");
+
+            // Circle
+            const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            circle.setAttribute("cx", "150");
+            circle.setAttribute("cy", "150");
+            circle.setAttribute("r", "100");
+            circle.setAttribute("fill", "none");
+            circle.setAttribute("stroke", "black");
+            svg.appendChild(circle);
+
+            // Lines
+            function line(p1, p2, dashed = false) {
+                const l = document.createElementNS("http://www.w3.org/2000/svg", "line");
+                l.setAttribute("x1", p1.x.toFixed(1));
+                l.setAttribute("y1", p1.y.toFixed(1));
+                l.setAttribute("x2", p2.x.toFixed(1));
+                l.setAttribute("y2", p2.y.toFixed(1));
+                l.setAttribute("stroke", "black");
+                l.setAttribute("stroke-width", "2");
+                if (dashed) {
+                    l.setAttribute("stroke-dasharray", "5,5");
+                }
+                return l;
+            }
+
+            if (questionType === 'inscribed') {
+                const posO = { x: 150, y: 150 };
+                const oDot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+                oDot.setAttribute("cx", posO.x);
+                oDot.setAttribute("cy", posO.y);
+                oDot.setAttribute("r", "3");
+                oDot.setAttribute("fill", "black");
+                svg.appendChild(oDot);
+                const oText = document.createElementNS("http://www.w3.org/2000/svg", "text");
+                oText.setAttribute("x", "152");
+                oText.setAttribute("y", "155");
+                oText.setAttribute("font-size", "12");
+                oText.setAttribute("fill", "black");
+                oText.textContent = "O";
+                svg.appendChild(oText);
+
+                const posR = point(currentPos.R);
+                const posS = point(currentPos.S);
+                const posT = point(currentPos.T);
+                const posU = point(currentPos.U);
+                svg.appendChild(line(posO, posR));
+                svg.appendChild(line(posO, posT));
+                svg.appendChild(line(posR, posS));
+                svg.appendChild(line(posS, posT));
+                svg.appendChild(line(posR, posU));
+                svg.appendChild(line(posU, posT));
+                dot(svg, posR, "R", 12);
+                dot(svg, posS, "S", 12);
+                dot(svg, posT, "T", 12);
+                dot(svg, posU, "U", 12);
+            } else if (questionType === 'quad_variables' || questionType === 'quad') {
+                const thetas = generateThetas(4, 40);
+                currentPos = { A: thetas[0], B: thetas[1], C: thetas[2], D: thetas[3] };
+                const posA = point(currentPos.A);
+                const posB = point(currentPos.B);
+                const posC = point(currentPos.C);
+                const posD = point(currentPos.D);
+                svg.appendChild(line(posA, posB));
+                svg.appendChild(line(posB, posC));
+                svg.appendChild(line(posC, posD));
+                svg.appendChild(line(posD, posA));
+                dot(svg, posA, "A", 12);
+                dot(svg, posB, "B", 12);
+                dot(svg, posC, "C", 12);
+                dot(svg, posD, "D", 12);
+            } else if (questionType === 'triangle') {
+                const thetas = generateThetas(3, 40);
+                currentPos = { A: thetas[0], B: thetas[1], C: thetas[2] };
+                const posA = point(currentPos.A);
+                const posB = point(currentPos.B);
+                const posC = point(currentPos.C);
+                svg.appendChild(line(posA, posB));
+                svg.appendChild(line(posB, posC));
+                svg.appendChild(line(posC, posA));
+                dot(svg, posA, "A", 12);
+                dot(svg, posB, "B", 12);
+                dot(svg, posC, "C", 12);
+            } else if (questionType === 'inscribed_adj') {
+                const thetas = generateThetas(4, 40);
+                currentPos = { K: thetas[0], L: thetas[1], N: thetas[2], M: thetas[3] };
+                const posK = point(currentPos.K);
+                const posL = point(currentPos.L);
+                const posN = point(currentPos.N);
+                const posM = point(currentPos.M);
+
+                // Extend to P
+                let vx = posM.x - posK.x;
+                let vy = posM.y - posK.y;
+                let len = Math.sqrt(vx * vx + vy * vy);
+                let unitx = vx / len;
+                let unity = vy / len;
+                const posP = {
+                    x: posM.x + unitx * 50,
+                    y: posM.y + unity * 50
+                };
+
+                // Lines - only K to N and M to L dashed
+                svg.appendChild(line(posP, posM)); // solid
+                svg.appendChild(line(posK, posM)); // solid, part of straight line
+                svg.appendChild(line(posM, posN)); // solid
+                svg.appendChild(line(posK, posN, true)); // dashed, K to N
+                svg.appendChild(line(posN, posL)); // solid
+                svg.appendChild(line(posM, posL, true)); // dashed, M to L
+                svg.appendChild(line(posK, posL)); // solid, KL
+
+                dot(svg, posK, "K", 12);
+                dot(svg, posL, "L", 12);
+                dot(svg, posN, "N", 12);
+                dot(svg, posM, "M", 12);
+                dot(svg, posP, "P", 12);
+            } else if (questionType === 'isosceles_chord') {
+                const posS = point(currentPos.S);
+                const posU = point(currentPos.U);
+                const posV = point(currentPos.V);
+                const posW = point(currentPos.W);
+
+                // Compute posR: extend U-S beyond S
+                let vecX = posS.x - posU.x;
+                let vecY = posS.y - posU.y;
+                let lenUS = Math.sqrt(vecX * vecX + vecY * vecY);
+                let posR;
+                if (lenUS > 0) {
+                    let unitX = vecX / lenUS;
+                    let unitY = vecY / lenUS;
+                    const extendDist = 50;
+                    posR = {
+                        x: posS.x + unitX * extendDist,
+                        y: posS.y + unitY * extendDist
+                    };
+                } else {
+                    posR = { x: posS.x - 50, y: posS.y }; // fallback
+                }
+
+                // Compute posT: extend W-S beyond S
+                let vecXW = posS.x - posW.x;
+                let vecYW = posS.y - posW.y;
+                let lenWS = Math.sqrt(vecXW * vecXW + vecYW * vecYW);
+                let posT;
+                if (lenWS > 0) {
+                    let unitXW = vecXW / lenWS;
+                    let unitYW = vecYW / lenWS;
+                    const extendDist = 50;
+                    posT = {
+                        x: posS.x + unitXW * extendDist,
+                        y: posS.y + unitYW * extendDist
+                    };
+                } else {
+                    posT = { x: posS.x + 50, y: posS.y }; // fallback
+                }
+
+                // Lines: secant R-S-U
+                svg.appendChild(line(posR, posU));
+
+                // Secant T-S-W
+                svg.appendChild(line(posT, posW));
+
+                // Triangle UVW
+                svg.appendChild(line(posU, posV));
+                svg.appendChild(line(posV, posW));
+                svg.appendChild(line(posW, posU));
+
+                // Dots
+                dot(svg, posR, "R", 12);
+                dot(svg, posS, "S", 12);
+                dot(svg, posU, "U", 12);
+                dot(svg, posV, "V", 12);
+                dot(svg, posW, "W", 12);
+                dot(svg, posT, "T", 12);
+
+                // Draw angle arc at W only
+                const arcRadius = 12;
+                drawAngleArc(svg, posW, posU, posV, arcRadius, '');
+            } else if (questionType === 'cyclic_quad_tangent') {
+                const posP = point(currentPos.P);
+                const posQ = point(currentPos.Q);
+                const posR = point(currentPos.R);
+                const posS = point(currentPos.S);
+
+                // Quadrilateral sides
+                svg.appendChild(line(posP, posQ));
+                svg.appendChild(line(posQ, posR));
+                svg.appendChild(line(posR, posS));
+                svg.appendChild(line(posS, posP));
+
+                // Diagonal QS
+                svg.appendChild(line(posQ, posS));
+
+                // Compute posT as extension of S-R beyond R, opposite direction
+                let vec_rs = {x: posS.x - posR.x, y: posS.y - posR.y};
+                let len_rs = Math.sqrt(vec_rs.x * vec_rs.x + vec_rs.y * vec_rs.y);
+                let unit_rs_x = vec_rs.x / len_rs;
+                let unit_rs_y = vec_rs.y / len_rs;
+                const posT = {
+                    x: posR.x - 50 * unit_rs_x,
+                    y: posR.y - 50 * unit_rs_y
+                };
+
+                // Line T to R
+                svg.appendChild(line(posT, posR));
+
+                // Dots
+                dot(svg, posP, "P", 12);
+                dot(svg, posQ, "Q", 12);
+                dot(svg, posR, "R", 12);
+                dot(svg, posS, "S", 12);
+                dot(svg, posT, "T", 12);
+
+                // Angle arc without number
+                const arcRadius = 12;
+                drawAngleArc(svg, posR, posQ, posT, arcRadius, '');
+            } else if (questionType === 'cyclic_pentagon') {
+                const posA = point(currentPos.A);
+                const posB = point(currentPos.B);
+                const posC = point(currentPos.C);
+                const posD = point(currentPos.D);
+                const posE = point(currentPos.E);
+
+                svg.appendChild(line(posA, posB));
+                svg.appendChild(line(posB, posC));
+                svg.appendChild(line(posC, posD));
+                svg.appendChild(line(posD, posE));
+                svg.appendChild(line(posE, posA));
+                svg.appendChild(line(posC, posE));
+
+                dot(svg, posA, "A", 12);
+                dot(svg, posB, "B", 12);
+                dot(svg, posC, "C", 12);
+                dot(svg, posD, "D", 12);
+                dot(svg, posE, "E", 12);
+
+                const arcRadius = 12;
+                drawAngleArc(svg, posC, posD, posE, arcRadius, '');
+                drawAngleArc(svg, posE, posD, posC, arcRadius, '');
+            }
+
+            diagramDiv.appendChild(svg);
+        }
+
+        function generateQuestion() {
+            questionType = document.getElementById('typeSelect').value;
+            let questionText = '';
+
+            if (questionType === 'quad') {
+                let angleA = Math.floor(Math.random() * 121) + 30;
+                let angleD = Math.floor(Math.random() * 121) + 30;
+                let angleB = 180 - angleD;
+                let angleC = 180 - angleA;
+                currentAngles = { A: angleA, B: angleB, C: angleC, D: angleD };
+                questionText = `
+                    <strong>Pada gambar berikut, ABCD adalah segi empat tali busur. Besar ∠A = ${angleA}° dan ∠D = ${angleD}°</strong><br><br>
+                    Hitunglah:<br>
+                    a. Besar ∠B<br>
+                    b. Besar ∠C
+                `;
+            } else if (questionType === 'triangle') {
+                let angleA, angleB;
+                do {
+                    angleA = Math.floor(Math.random() * 81) + 20;
+                    angleB = Math.floor(Math.random() * 81) + 20;
+                } while (angleA + angleB >= 140);
+                let angleC = 180 - angleA - angleB;
+                currentAngles = { A: angleA, B: angleB, C: angleC };
+                questionText = `
+                    <strong>Pada gambar berikut, ABC adalah segi tiga tali busur. Besar ∠A = ${angleA}° dan ∠B = ${angleB}°</strong><br><br>
+                    Hitunglah:<br>
+                    Besar ∠C
+                `;
+            } else if (questionType === 'inscribed') {
+                const alpha = Math.floor(Math.random() * 91) + 30;
+                const central = 2 * alpha;
+                currentAngles = { alpha, central };
+                const minGap = 30;
+                currentPos = generateThetasForInscribed(central, minGap);
+                questionText = `
+                    <strong>Gambar berikut menunjukkan O adalah pusat lingkaran. Besar ∠RST = ${alpha}°</strong><br><br>
+                    Tentukan:<br>
+                    a. Besar ∠U<br>
+                    b. Besar ∠ROT
+                `;
+            } else if (questionType === 'quad_variables') {
+                let a, b, c, d, e;
+                let x, y;
+                let valid = false;
+                while (!valid) {
+                    a = Math.floor(Math.random() * 3) + 2; // 2-4
+                    b = Math.floor(Math.random() * 3) + 4; // 4-6
+                    c = Math.floor(Math.random() * 2) + 1; // 1-2
+                    d = Math.floor(Math.random() * 37) + 1; // 1-37
+                    e = Math.floor(Math.random() * 3) + 3; // 3-5
+                    let sumY = a + c;
+                    y = Math.round((180 - d) / sumY);
+                    x = Math.round(180 / (b + e));
+                    if (x > 0 && x <= 30 && y > 0 && y <= 50) {
+                        let angleA = a * y;
+                        let angleB = b * x;
+                        let angleC = c * y + d;
+                        let angleD = e * x;
+                        if (angleA >= 30 && angleA <= 150 && angleB >= 30 && angleB <= 150 &&
+                            angleC >= 30 && angleC <= 150 && angleD >= 30 && angleD <= 150) {
+                            currentAngles = { x, y, angleB, angleC, a, b, c, d, e };
+                            valid = true;
+                        }
+                    }
+                }
+                questionText = `
+                    <strong>4. Pada gambar berikut, ABCD adalah segi empat tali busur.</strong><br><br>
+                    Besar ∠DAB = ${currentAngles.a}y°, ∠ABC = ${currentAngles.b}x°, ∠BCD = ${currentAngles.c}y + ${currentAngles.d}°, ∠CDA = ${currentAngles.e}x°<br><br>
+                    Hitunglah:<br>
+                    a. Nilai x<br>
+                    b. Besar ∠B<br>
+                    c. Nilai y<br>
+                    d. Besar ∠C
+                `;
+            } else if (questionType === 'inscribed_adj') {
+                let pmn, knl;
+                let valid = false;
+                while (!valid) {
+                    pmn = Math.floor(Math.random() * 61) + 80; // 80-140
+                    knl = Math.floor(Math.random() * 21) + 20; // 20-40
+                    let kml = knl;
+                    let kmn = 180 - pmn;
+                    let kln = kmn - kml;
+                    if (kln > 0 && kln < 90) {
+                        currentAngles = { pmn, knl, kml, kln };
+                        valid = true;
+                    }
+                }
+                questionText = `
+                    <strong>5. Pada gambar berikut, besar ∠PMN = ${currentAngles.pmn}° dan ∠KNL = ${currentAngles.knl}°</strong><br><br>
+                    Tentukan:<br>
+                    a. Besar ∠KML<br>
+                    b. Besar ∠KLN
+                `;
+            } else if (questionType === 'isosceles_chord') {
+                const theta = Math.floor(Math.random() * 31) + 20; // 20-50
+                const V = 180 - 2 * theta;
+                const WSU = 2 * theta;
+                const RST = 2 * theta;
+                currentAngles = { theta, V, WSU, RST };
+                // Generate positions for U, V, W, S
+                const minGap = 30;
+                while(true) {
+                    let rotation = Math.random() * 360;
+                    let gamma = Math.random() * 70 + 20; // central angle for UV and VW
+                    let uPos = rotation % 360;
+                    let vPos = (uPos + gamma) % 360;
+                    let wPos = (vPos + gamma) % 360;
+                    let oppLength = 360 - 2 * gamma;
+                    if (oppLength < 2 * minGap) continue;
+                    let distFromW = minGap + Math.random() * (oppLength - 2 * minGap);
+                    let sPos = (wPos + distFromW) % 360;
+                    let thetas = [uPos, vPos, wPos, sPos].map(p => p % 360);
+                    thetas.sort((a, b) => a - b);
+                    let gapsOk = true;
+                    for (let i = 0; i < 3; i++) {
+                        if (thetas[i + 1] - thetas[i] < minGap) {
+                            gapsOk = false;
+                            break;
+                        }
+                    }
+                    if (thetas[0] + 360 - thetas[3] < minGap) gapsOk = false;
+                    if (gapsOk) {
+                        currentPos = { U: uPos, V: vPos, W: wPos, S: sPos };
+                        break;
+                    }
+                }
+                questionText = `
+                    <strong>6. Pada gambar berikut, Panjang UV = VW dan besar ∠UWV = ${theta}°</strong><br><br>
+                    Hitunglah besar sudut-sudut berikut:<br>
+                    a. ∠V<br>
+                    b. ∠WSU<br>
+                    c. ∠RST
+                `;
+            } else if (questionType === 'cyclic_quad_tangent') {
+                const phi = Math.floor(Math.random() * 21) + 100; // 100-120
+                const qrs = 180 - phi;
+                const qps = 180 - qrs;
+                const pqs = (180 - qps) / 2;
+                currentAngles = { phi, qrs, qps, pqs };
+                const delta = qrs;
+                const rot = Math.random() * 360;
+                const p_theta = rot % 360;
+                const q_theta = (p_theta + delta) % 360;
+                const s_theta = (p_theta - delta + 360) % 360;
+                const r_theta = (p_theta + 180) % 360;
+                currentPos = { P: p_theta, Q: q_theta, R: r_theta, S: s_theta };
+                questionText = `
+                    <strong>7. Pada gambar berikut, PQRS adalah segi empat tali busur. Besar ∠QRT = ${phi}° dan Panjang PQ = PS.</strong><br><br>
+                    Hitunglah besar sudut-sudut berikut:<br>
+                    a. ∠QRS<br>
+                    b. ∠QPS<br>
+                    c. ∠PQS
+                `;
+            } else if (questionType === 'cyclic_pentagon') {
+                let thetas;
+                let angleA, angleB, angleC, angleD, angleE;
+                let valid = false;
+                while (!valid) {
+                    let tempThetas = generateThetas(4, 40);
+                    let thetaA = tempThetas[0];
+                    let thetaB = tempThetas[1];
+                    let thetaC = tempThetas[2];
+                    let thetaE = tempThetas[3];
+                    let spanCE = thetaE - thetaC;
+                    if (spanCE < 80) continue;
+                    let gap = spanCE / 2;
+                    let thetaD = thetaC + gap;
+                    thetas = [thetaA, thetaB, thetaC, thetaD, thetaE];
+                    const posA = point(thetas[0]);
+                    const posB = point(thetas[1]);
+                    const posC = point(thetas[2]);
+                    const posD = point(thetas[3]);
+                    const posE = point(thetas[4]);
+                    angleA = computeAngle(posA, posB, posE);
+                    angleB = computeAngle(posB, posA, posC);
+                    angleC = computeAngle(posC, posB, posD);
+                    angleD = computeAngle(posD, posC, posE);
+                    angleE = computeAngle(posE, posD, posA);
+                    const a = Math.round(angleA);
+                    const b = Math.round(angleB);
+                    const c = Math.round(angleC);
+                    const d = Math.round(angleD);
+                    const e = Math.round(angleE);
+                    if (a > 50 && a < 150 && b > 50 && b < 150 && d > 50 && d < 150 && c > 50 && c < 150 && e > 50 && e < 150) {
+                        valid = true;
+                        currentPos = { A: thetas[0], B: thetas[1], C: thetas[2], D: thetas[3], E: thetas[4] };
+                        currentAngles = { a, b, c, d, e };
+                    }
+                }
+                questionText = `
+                    <strong>8. Pada gambar berikut, besar ∠BAE = ${currentAngles.a}°, ∠ABC = ${currentAngles.b}°, dan ∠CDE = ${currentAngles.d}°</strong><br><br>
+                    Hitunglah:<br>
+                    a. Besar ∠BCD<br>
+                    b. Besar ∠AED
+                `;
+            }
+
+            document.getElementById('question').innerHTML = questionText;
+            drawDiagram();
+            document.getElementById('answer').style.display = 'none';
+            document.getElementById('showBtn').style.display = 'block';
+        }
+
+        function toggleAnswer() {
+            let answerText;
+            if (questionType === 'quad') {
+                const { B, C } = currentAngles;
+                answerText = `
+                    <strong>Jawaban:</strong><br>
+                    a. Besar ∠B = ${B}°<br>
+                    b. Besar ∠C = ${C}°<br><br>
+                    <em>Penjelasan: Pada segi empat tali busur (cyclic quadrilateral), jumlah sudut lawan adalah 180°. Sehingga ∠B = 180° - ∠D dan ∠C = 180° - ∠A.</em>
+                `;
+            } else if (questionType === 'triangle') {
+                const { C } = currentAngles;
+                answerText = `
+                    <strong>Jawaban:</strong><br>
+                    Besar ∠C = ${C}°<br><br>
+                    <em>Penjelasan: Pada segi tiga, jumlah ketiga sudut adalah 180°. Sehingga ∠C = 180° - ∠A - ∠B.</em>
+                `;
+            } else if (questionType === 'inscribed') {
+                const { alpha, central } = currentAngles;
+                answerText = `
+                    <strong>Jawaban:</strong><br>
+                    a. Besar ∠U = ${alpha}°<br>
+                    b. Besar ∠ROT = ${central}°<br><br>
+                    <em>Penjelasan: Sudut keliling ∠U yang menjaring busur RT sama dengan ∠RST = ${alpha}° karena berada di segmen yang sama. Sudut pusat ∠ROT = 2 × sudut keliling = 2 × ${alpha}° = ${central}°.</em>
+                `;
+            } else if (questionType === 'quad_variables') {
+                const { x, y, angleB, angleC, a, b, c, d, e } = currentAngles;
+                answerText = `
+                    <strong>Jawaban:</strong><br>
+                    a. Nilai x = ${x}<br>
+                    b. Besar ∠B = ${angleB}°<br>
+                    c. Nilai y = ${y}<br>
+                    d. Besar ∠C = ${angleC}°<br><br>
+                    <em>Penjelasan: Pada segi empat tali busur, jumlah sudut lawan adalah 180°. Sehingga ∠A + ∠C = 180° ⇒ ${a}y + ${c}y + ${d} = 180 ⇒ y = ${(180 - d)/(a + c)} = ${y}. Dan ∠B + ∠D = 180° ⇒ ${b}x + ${e}x = 180 ⇒ x = 180 / (${b + e}) = ${x}.</em>
+                `;
+            } else if (questionType === 'inscribed_adj') {
+                const { kml, kln } = currentAngles;
+                answerText = `
+                    <strong>Jawaban:</strong><br>
+                    a. Besar ∠KML = ${kml}°<br>
+                    b. Besar ∠KLN = ${kln}°<br><br>
+                    <em>Penjelasan: ∠KML = ∠KNL (sudut keliling dengan busur sama KL). ∠KMN = 180° - ∠PMN (sudut berpelurus). ∠KLN = ∠KMN - ∠KML.</em>
+                `;
+            } else if (questionType === 'isosceles_chord') {
+                const { theta, V, WSU, RST } = currentAngles;
+                answerText = `
+                    <strong>Jawaban:</strong><br>
+                    a. ∠V = ${V}°<br>
+                    b. ∠WSU = ${WSU}°<br>
+                    c. ∠RST = ${RST}°<br><br>
+                    <em>Penjelasan: Pada segitiga UVW, UV = VW sehingga ∠WUV = ∠UWV = ${theta}°, maka ∠UVW = 180° - 2 × ${theta}° = ${V}°. ∠WSU = 180° - ∠UVW = ${2 * theta}° (suplemen). ∠RST = ∠WSU (${2 * theta}°) (sudut bertolak belakang).</em>
+                `;
+            } else if (questionType === 'cyclic_quad_tangent') {
+                const { phi, qrs, qps, pqs } = currentAngles;
+                answerText = `
+                    <strong>Jawaban:</strong><br>
+                    a. Besar ∠QRS = ${qrs}°<br>
+                    b. Besar ∠QPS = ${qps}°<br>
+                    c. Besar ∠PQS = ${pqs}°<br><br>
+                    <em>Penjelasan: Karena garis TRS lurus, maka ∠QRT + ∠QRS = 180°, sehingga ∠QRS = 180° - ${phi}° = ${qrs}°. Karena PQRS segi empat tali busur, jumlah sudut lawan 180°, sehingga ∠QPS = 180° - ∠QRS = ${qps}°. Pada ∆PQS dengan PQ = PS, sudut dasar sama, ∠PQS = ∠PSQ = (180° - ∠QPS)/2 = ${pqs}°.</em>
+                `;
+            } else if (questionType === 'cyclic_pentagon') {
+                const { a, b, c, d, e } = currentAngles;
+                answerText = `
+                    <strong>Jawaban:</strong><br>
+                    a. Besar ∠BCD = ${c}°<br>
+                    b. Besar ∠AED = ${e}°<br><br>
+                    <em>Penjelasan: Dalam segi lima ABCDE yang bersifat siklik, sudut-sudut interior dihitung menggunakan rumus sudut antara vektor sisi-sisi yang berdekatan. Nilai-nilai ini memastikan jumlah sudut interior adalah 540°.</em>
+                `;
+            }
+
+            const answerDiv = document.getElementById('answer');
+            if (answerDiv.style.display === 'none') {
+                answerDiv.innerHTML = answerText;
+                answerDiv.style.display = 'block';
+                document.getElementById('showBtn').textContent = 'Sembunyikan Jawaban';
+            } else {
+                answerDiv.style.display = 'none';
+                document.getElementById('showBtn').textContent = 'Tampilkan Jawaban';
+            }
+        }
+
+        // Generate initial question
+        generateQuestion();
+    </script>
+</body>
+</html>
